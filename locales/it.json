@@ -1,0 +1,12 @@
+{
+    "Gizmo": "Gizmo",
+    "translate": "Attiva/Disattiva Traslazione",
+    "rotate": "Attiva/Disattiva Rotazione",
+    "Snap To Ground": "Allinea al terreno",
+    "Cancel": "Annulla",
+    "Done Editing": "Fine modifica",
+    "Move L/R": "Muovi Sinistra/Destra",
+    "Move F/B": "Muovi Avanti/Indietro",
+    "Move Up": "Muovi Su",
+    "Move Down": "Muovi Giù"
+}
