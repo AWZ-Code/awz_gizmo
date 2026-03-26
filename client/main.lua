@@ -178,7 +178,15 @@ function ToggleGizmo(entity, cfg, allowPlace)
         coords = GetEntityCoords(entity),
         rotation = GetEntityRotation(entity)
     }
-    entityWasFrozen = IsEntityPositionFrozen(entity)
+
+    -- RedM builds do not always expose IsEntityPositionFrozen as a global.
+    -- Fallback to the last known state instead of crashing the gizmo flow.
+    if type(IsEntityPositionFrozen) == 'function' then
+        entityWasFrozen = IsEntityPositionFrozen(entity) or false
+    else
+        entityWasFrozen = false
+    end
+
     FreezeEntityPosition(entity, true)
     SetEntityCollision(entity, false, false)
 
