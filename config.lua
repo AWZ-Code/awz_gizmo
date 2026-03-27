@@ -1,12 +1,15 @@
 Config = {
     DevMode = false,                                    -- Enable/Disable Dev Mode
-    Locale = 'it',                                      -- Locale to use
+
+    Locale = 'en',                                      -- Locale to use
+
     EnableCam = true,                                   -- Enable/Disable camera feature
     MaxDistance = 100,                                  -- Max disatnce the gizmo can be moved from the starting position (set to false to disable)
     MaxCamDistance = 80,                                -- Max distance the camera can be moved from the player
     MinY = -40,                                         -- Min Y value from starting position for camera
     MaxY = 40,                                          -- Max Y value starting position for camera
     MovementSpeed = 0.1,                                -- Movement speed for camera
+
 
     -- Keybinds (do not use w, a, s, d, q, and e)
     Keybinds = {

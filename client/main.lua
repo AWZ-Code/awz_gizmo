@@ -8,9 +8,14 @@ local maxCamDistance
 local minY
 local maxY
 local movementSpeed
+local snapMode
+local autoSnapOnDone
+local snapMaxDistance
 local stored
 local hookedFunc
-local entityWasFrozen = false
+local editingEntity = nil
+local lastRequestedPosition = nil
+local lastRequestedRotation = nil
 
 --- Export Handler
 --- @param resourceName string
@@ -60,6 +65,9 @@ local function Init(bool)
 
         stored = nil
         hookedFunc = nil
+        editingEntity = nil
+        lastRequestedPosition = nil
+        lastRequestedRotation = nil
         
         SendNUIMessage({
             action = 'SetupGizmo',
@@ -154,6 +162,73 @@ local function CamControls()
     Movement()
 end
 
+
+local function _GetEntityBaseOffset(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return 0.01 end
+    local minDim = vector3(0.0, 0.0, 0.0)
+    local maxDim = vector3(0.0, 0.0, 0.0)
+    local ok = pcall(function()
+        return GetModelDimensions(GetEntityModel(entity), minDim, maxDim)
+    end)
+    if ok then
+        return ((-minDim.z) or 0.0) + 0.01
+    end
+    return 0.01
+end
+
+local function _RaycastWithFlags(fromCoords, toCoords, flags, ignoreEntity)
+    local ray = StartShapeTestRay(fromCoords.x, fromCoords.y, fromCoords.z, toCoords.x, toCoords.y, toCoords.z, flags or 511, ignoreEntity or 0, 7)
+    local _, hit, endCoords, _, entityHit = GetShapeTestResult(ray)
+    if hit == 1 then
+        return true, endCoords, entityHit or 0
+    end
+    return false, endCoords, 0
+end
+
+local function _GetGameplayCamDirection()
+    local rot = GetGameplayCamRot(0)
+    local rx, rz = math.rad(rot.x), math.rad(rot.z)
+    return vec3(-math.sin(rz) * math.cos(rx), math.cos(rz) * math.cos(rx), math.sin(rx))
+end
+
+local function _TrySurfaceSnapBelow(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return false end
+    local coords = GetEntityCoords(entity)
+    local baseOffset = _GetEntityBaseOffset(entity)
+    local fromCoords = vec3(coords.x, coords.y, coords.z + 10.0)
+    local toCoords = vec3(coords.x, coords.y, coords.z - 20.0)
+    local hit, endCoords = _RaycastWithFlags(fromCoords, toCoords, 511, entity)
+    if not hit or not endCoords then return false end
+
+    local snappedZ = endCoords.z + baseOffset
+    SetEntityCoordsNoOffset(entity, coords.x, coords.y, snappedZ, false, false, false)
+    return true
+end
+
+local function _TrySurfaceSnapFromCamera(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return false end
+    local camPos = GetFinalRenderedCamCoord()
+    local dir = _GetGameplayCamDirection()
+    local dist = tonumber(snapMaxDistance or maxDistance or 20.0) or 20.0
+    local toCoords = vec3(camPos.x + dir.x * dist, camPos.y + dir.y * dist, camPos.z + dir.z * dist)
+    local hit, endCoords = _RaycastWithFlags(camPos, toCoords, 511, entity)
+    if not hit or not endCoords then return false end
+
+    local baseOffset = _GetEntityBaseOffset(entity)
+    SetEntityCoordsNoOffset(entity, endCoords.x, endCoords.y, endCoords.z + baseOffset, false, false, false)
+    return true
+end
+
+local function _SmartSnapEntity(entity)
+    if snapMode == 'surface' then
+        if _TrySurfaceSnapBelow(entity) then return true end
+        if _TrySurfaceSnapFromCamera(entity) then return true end
+    end
+
+    PlaceObjectOnGroundProperly(entity)
+    return true
+end
+
 --- Setup Gizmo
 --- @param entity number
 --- @param cfg table | nil
@@ -172,6 +247,9 @@ function ToggleGizmo(entity, cfg, allowPlace)
     minY = (cfg?.MinY == nil and Config.MinY) or cfg.MinY
     maxY = (cfg?.MaxY == nil and Config.MaxY) or cfg.MaxY
     movementSpeed = (cfg?.MovementSpeed == nil and Config.MovementSpeed) or cfg.MovementSpeed
+    snapMode = (cfg?.SnapMode == nil and 'ground') or cfg.SnapMode
+    autoSnapOnDone = (cfg?.AutoSnapOnDone == nil and false) or cfg.AutoSnapOnDone
+    snapMaxDistance = (cfg?.SnapMaxDistance == nil and maxDistance) or cfg.SnapMaxDistance
     mode = 'translate'
 
     stored = {
@@ -179,16 +257,20 @@ function ToggleGizmo(entity, cfg, allowPlace)
         rotation = GetEntityRotation(entity)
     }
 
-    -- RedM builds do not always expose IsEntityPositionFrozen as a global.
-    -- Fallback to the last known state instead of crashing the gizmo flow.
     if type(IsEntityPositionFrozen) == 'function' then
         entityWasFrozen = IsEntityPositionFrozen(entity) or false
     else
         entityWasFrozen = false
     end
 
-    FreezeEntityPosition(entity, true)
+    editingEntity = entity
+    lastRequestedPosition = { x = stored.coords.x + 0.0, y = stored.coords.y + 0.0, z = stored.coords.z + 0.0 }
+    lastRequestedRotation = { x = stored.rotation.x + 0.0, y = stored.rotation.y + 0.0, z = stored.rotation.z + 0.0 }
+
     SetEntityCollision(entity, false, false)
+    FreezeEntityPosition(entity, true)
+    SetEntityCoordsNoOffset(entity, lastRequestedPosition.x, lastRequestedPosition.y, lastRequestedPosition.z, false, false, false)
+    SetEntityRotation(entity, lastRequestedRotation.x, lastRequestedRotation.y, lastRequestedRotation.z, 2, true)
 
     hookedFunc = allowPlace
 
@@ -256,7 +338,7 @@ function ToggleGizmo(entity, cfg, allowPlace)
             end
 
             if SnapToGroundPrompt:HasCompleted() then
-                PlaceObjectOnGroundProperly(entity)
+                _SmartSnapEntity(entity)
                 SendNUIMessage({
                     action = 'SetupGizmo',
                     data = {
@@ -268,16 +350,27 @@ function ToggleGizmo(entity, cfg, allowPlace)
             end
 
             if DonePrompt:HasCompleted() then
-                local coords = GetEntityCoords(entity)
+                local rotation = lastRequestedRotation or GetEntityRotation(entity)
+
+                if autoSnapOnDone then
+                    _SmartSnapEntity(entity)
+                end
+
+                local finalCoords = GetEntityCoords(entity)
+                local coords = { x = finalCoords.x + 0.0, y = finalCoords.y + 0.0, z = finalCoords.z + 0.0 }
+
+                SetEntityCoordsNoOffset(entity, coords.x, coords.y, coords.z, false, false, false)
+                SetEntityRotation(entity, rotation.x, rotation.y, rotation.z, 2, true)
+                FreezeEntityPosition(entity, true)
+                SetEntityCollision(entity, true, true)
+
                 responseData:resolve({
                     entity = entity,
                     coords = coords,
                     position = coords, -- Alias
-                    rotation = GetEntityRotation(entity)
+                    rotation = rotation
                 })
 
-                SetEntityCollision(entity, true, true)
-                FreezeEntityPosition(entity, entityWasFrozen)
                 Init(false)
             end
 
@@ -293,8 +386,8 @@ function ToggleGizmo(entity, cfg, allowPlace)
 
                 SetEntityCoordsNoOffset(entity, stored.coords.x, stored.coords.y, stored.coords.z, false, false, false)
                 SetEntityRotation(entity, stored.rotation.x, stored.rotation.y, stored.rotation.z, 2, true)
+                FreezeEntityPosition(entity, true)
                 SetEntityCollision(entity, true, true)
-                FreezeEntityPosition(entity, entityWasFrozen)
 
                 Init(false)
 
@@ -322,8 +415,11 @@ RegisterNUICallback('UpdateEntity', function(data, cb)
     local rotation = data.rotation
 
     if (maxDistance and #(vec3(position.x, position.y, position.z) - stored.coords) <= maxDistance) and (not hookedFunc or hookedFunc(position)) then
-        SetEntityCoordsNoOffset(entity, position.x + 0.0, position.y + 0.0, position.z + 0.0, false, false, false)
-        SetEntityRotation(entity, (rotation.x or 0.0) + 0.0, (rotation.y or 0.0) + 0.0, (rotation.z or 0.0) + 0.0, 2, true)
+        lastRequestedPosition = { x = position.x + 0.0, y = position.y + 0.0, z = position.z + 0.0 }
+        lastRequestedRotation = { x = rotation.x + 0.0, y = rotation.y + 0.0, z = rotation.z + 0.0 }
+
+        SetEntityCoordsNoOffset(entity, position.x, position.y, position.z, false, false, false)
+        SetEntityRotation(entity, rotation.x, rotation.y, rotation.z, 2, true)
         return cb({status = 'ok'})
     end
 

@@ -3,9 +3,9 @@ games {"rdr3"}
 rdr3_warning "I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships."
 lua54 "yes"
 
-author ''
+author '_G[S]cripts'
 description 'Gizmo for RedM'
-version '1.1.6'
+version '1.0.6'
 
 shared_script 'config.lua'
 
@@ -22,4 +22,5 @@ files {
 	'web/dist/**/*',
 }
 
+-- Provide 'object_gizmo' exports
 provide 'object_gizmo'
