@@ -9,7 +9,7 @@ Config = {
     MinY = -40,                                         -- Min Y value from starting position for camera
     MaxY = 40,                                          -- Max Y value starting position for camera
     MovementSpeed = 0.1,                                -- Movement speed for camera
-
+    PromptPriority = 12,                               -- Prompt priority while gizmo is active
 
     -- Keybinds (do not use w, a, s, d, q, and e)
     Keybinds = {

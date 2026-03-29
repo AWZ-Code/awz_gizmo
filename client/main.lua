@@ -16,6 +16,11 @@ local hookedFunc
 local editingEntity = nil
 local lastRequestedPosition = nil
 local lastRequestedRotation = nil
+local gizmoPromptPriority = nil
+
+local function SetGizmoActiveState(active)
+    LocalPlayer.state:set('awz_gizmo_active', active and true or false, false)
+end
 
 --- Export Handler
 --- @param resourceName string
@@ -50,6 +55,7 @@ local function Init(bool)
         end
         
         SetCurrentPedWeapon(ped, GetHashKey('WEAPON_UNARMED'), true)
+        SetGizmoActiveState(true)
     else
         SetNuiFocus(false, false)
         SetNuiFocusKeepInput(IsNuiFocusKeepingInput())
@@ -75,6 +81,7 @@ local function Init(bool)
                 handle = nil,
             }
         })
+        SetGizmoActiveState(false)
     end
 
     gizmoActive = bool
@@ -247,6 +254,7 @@ function ToggleGizmo(entity, cfg, allowPlace)
     minY = (cfg?.MinY == nil and Config.MinY) or cfg.MinY
     maxY = (cfg?.MaxY == nil and Config.MaxY) or cfg.MaxY
     movementSpeed = (cfg?.MovementSpeed == nil and Config.MovementSpeed) or cfg.MovementSpeed
+    gizmoPromptPriority = tonumber((cfg?.PromptPriority == nil and Config.PromptPriority) or cfg.PromptPriority) or 12
     snapMode = (cfg?.SnapMode == nil and 'ground') or cfg.SnapMode
     autoSnapOnDone = (cfg?.AutoSnapOnDone == nil and false) or cfg.AutoSnapOnDone
     snapMaxDistance = (cfg?.SnapMaxDistance == nil and maxDistance) or cfg.SnapMaxDistance
@@ -314,17 +322,17 @@ function ToggleGizmo(entity, cfg, allowPlace)
 
     CreateThread(function()
         local PromptGroup = U.Prompts:SetupPromptGroup()
-        local TranslatePrompt = PromptGroup:RegisterPrompt(_('rotate'), U.Keys[Config.Keybinds.ToggleMode], 1, 1, true, 'click', {tab = 0})
-        local SnapToGroundPrompt = PromptGroup:RegisterPrompt(_('Snap To Ground'), U.Keys[Config.Keybinds.SnapToGround], 1, 1, true, 'click', {tab = 0})
-        local DonePrompt = PromptGroup:RegisterPrompt(_('Done Editing'), U.Keys[Config.Keybinds.Finish], 1, 1, true, 'click', {tab = 0})
-        local CancelPrompt = PromptGroup:RegisterPrompt(_('Cancel'), U.Keys[Config.Keybinds.Cancel], 1, 1, true, 'click', {tab = 0})
-        local LRPrompt = PromptGroup:RegisterPrompt(_('Move L/R'), U.Keys['A_D'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0})
-        local FBPrompt = PromptGroup:RegisterPrompt(_('Move F/B'), U.Keys['W_S'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0})
-        local UpPrompt = PromptGroup:RegisterPrompt(_('Move Up'), U.Keys['E'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0})
-        local DownPrompt = PromptGroup:RegisterPrompt(_('Move Down'), U.Keys['Q'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0})
+        local TranslatePrompt = PromptGroup:RegisterPrompt(_('rotate'), U.Keys[Config.Keybinds.ToggleMode], 1, 1, true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local SnapToGroundPrompt = PromptGroup:RegisterPrompt(_('Snap To Ground'), U.Keys[Config.Keybinds.SnapToGround], 1, 1, true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local DonePrompt = PromptGroup:RegisterPrompt(_('Done Editing'), U.Keys[Config.Keybinds.Finish], 1, 1, true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local CancelPrompt = PromptGroup:RegisterPrompt(_('Cancel'), U.Keys[Config.Keybinds.Cancel], 1, 1, true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local LRPrompt = PromptGroup:RegisterPrompt(_('Move L/R'), U.Keys['A_D'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local FBPrompt = PromptGroup:RegisterPrompt(_('Move F/B'), U.Keys['W_S'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local UpPrompt = PromptGroup:RegisterPrompt(_('Move Up'), U.Keys['E'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
+        local DownPrompt = PromptGroup:RegisterPrompt(_('Move Down'), U.Keys['Q'], (cam and true or false), (cam and true or false), true, 'click', {tab = 0, priority = gizmoPromptPriority, transportmode = 1})
 
         while gizmoActive do
-            Wait(5)
+            Wait(0)
             PromptGroup:ShowGroup(_('Gizmo'))
 
             if TranslatePrompt:HasCompleted() then
@@ -471,6 +479,9 @@ end)
 --- Export ToggleGizmo function
 --- @usage exports.awz_gizmo:Toggle(entity, {}, function(position) return true end)
 exports('Toggle', ToggleGizmo)
+exports('IsActive', function()
+    return gizmoActive == true
+end)
 
 --- Export Handler for https://github.com/outsider31000/object_gizmo/tree/main
 ExportHandler('object_gizmo', 'useGizmo', ToggleGizmo)

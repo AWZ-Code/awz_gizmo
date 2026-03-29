@@ -70,6 +70,12 @@ function U.Prompts:SetupPromptGroup()
 
         -- Set the prompt group and pulsing (if exists)
         PromptSetGroup(UIPrompt.Prompt, self.PromptGroup, options?.tab or 0)
+        if options?.priority ~= nil then
+            PromptSetPriority(UIPrompt.Prompt, tonumber(options.priority) or 5)
+        end
+        if options?.transportmode ~= nil then
+            PromptSetTransportMode(UIPrompt.Prompt, tonumber(options.transportmode) or 1)
+        end
         PromptSetUrgentPulsingEnabled(UIPrompt.Prompt, (pulsing == nil and true) or pulsing)
         PromptRegisterEnd(UIPrompt.Prompt)
         
